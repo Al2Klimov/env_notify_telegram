@@ -1,0 +1,7 @@
+[package]
+name = "env_notify_telegram"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.75.0" # Ubuntu 24.04 (+ Debian 13)
+license = "GPL-3.0"
+authors = ["Alexander A. Klimov <a@kli.mov>"]
