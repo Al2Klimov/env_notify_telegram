@@ -2,7 +2,7 @@ mod cli;
 mod tgapi;
 
 use crate::cli::Action;
-use crate::tgapi::{request, Message, Method, Update};
+use crate::tgapi::{request, Message, Method, SendMessage, Update};
 use cli::EnvError;
 use humantime::format_duration;
 use std::process::exit;
@@ -25,7 +25,7 @@ fn main() {
             Action::ListChats(token) => {
                 eprintln!("No chat given, discovering existing chats...");
 
-                match request::<Vec<Update>>(Method::Get, token, "getUpdates") {
+                match request::<(), Vec<Update>>(Method::Get, token, "getUpdates") {
                     Err(err) => eprintln!("{}", err),
                     Ok(resp) => {
                         let mut messages: usize = 0;
@@ -49,8 +49,21 @@ fn main() {
 
                 exit(3);
             }
-            Action::SendMessage(token, chat, message) => {
-                todo!()
+            Action::SendMessage(token, chat_id, message) => {
+                match request::<SendMessage, Message>(
+                    Method::Post(SendMessage {
+                        chat_id,
+                        text: message.to_string_lossy().to_string(),
+                    }),
+                    token,
+                    "sendMessage",
+                ) {
+                    Err(err) => {
+                        eprintln!("{}", err);
+                        exit(2);
+                    }
+                    Ok(_) => {}
+                }
             }
         },
     }
