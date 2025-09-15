@@ -15,5 +15,5 @@ version = "1.0.224"
 features = ["derive"]
 
 [dependencies.ureq]
-version = "3.1.0"
+version = "3.1.2"
 features = ["json"]
