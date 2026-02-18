@@ -99,3 +99,42 @@ impl Display for Failure {
         writeln!(f, "/{}: {}", self.action, self.err)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_failure_display_masks_token() {
+        let failure = Failure {
+            method: "GET",
+            token_len: 5,
+            action: "getUpdates",
+            err: ureq::Error::StatusCode(404),
+        };
+
+        let display = failure.to_string();
+
+        assert!(display.contains("GET"));
+        assert!(display.contains(BOT_API));
+        assert!(display.contains("*****"));
+        assert!(!display.contains("token"));
+        assert!(display.contains("getUpdates"));
+    }
+
+    #[test]
+    fn test_failure_display_post_method() {
+        let failure = Failure {
+            method: "POST",
+            token_len: 3,
+            action: "sendMessage",
+            err: ureq::Error::StatusCode(400),
+        };
+
+        let display = failure.to_string();
+
+        assert!(display.contains("POST"));
+        assert!(display.contains("***"));
+        assert!(display.contains("sendMessage"));
+    }
+}
