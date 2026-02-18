@@ -53,3 +53,113 @@ fn require_env(var: &'static str) -> Result<OsString, EnvFailure> {
         Some(oss) => Ok(oss),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::sync::Mutex;
+
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    fn clean_env() {
+        env::remove_var("ENTG_TOKEN");
+        env::remove_var("ENTG_CHAT");
+        env::remove_var("ENTG_MESSAGE");
+    }
+
+    #[test]
+    fn test_missing_token() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        clean_env();
+
+        let result = parse_env();
+
+        assert!(matches!(
+            result,
+            Err(EnvFailure {
+                var: "ENTG_TOKEN",
+                err: EnvError::Missing,
+            })
+        ));
+    }
+
+    #[test]
+    fn test_empty_token() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        clean_env();
+        env::set_var("ENTG_TOKEN", "");
+
+        let result = parse_env();
+
+        assert!(matches!(
+            result,
+            Err(EnvFailure {
+                var: "ENTG_TOKEN",
+                err: EnvError::Empty,
+            })
+        ));
+    }
+
+    #[test]
+    fn test_valid_token_no_chat() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        clean_env();
+        env::set_var("ENTG_TOKEN", "testtoken");
+
+        let result = parse_env();
+
+        assert!(matches!(result, Ok(Action::ListChats(t)) if t == "testtoken"));
+    }
+
+    #[test]
+    fn test_valid_token_empty_chat() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        clean_env();
+        env::set_var("ENTG_TOKEN", "testtoken");
+        env::set_var("ENTG_CHAT", "");
+
+        let result = parse_env();
+
+        assert!(matches!(
+            result,
+            Err(EnvFailure {
+                var: "ENTG_CHAT",
+                err: EnvError::Empty,
+            })
+        ));
+    }
+
+    #[test]
+    fn test_valid_token_and_chat_no_message() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        clean_env();
+        env::set_var("ENTG_TOKEN", "testtoken");
+        env::set_var("ENTG_CHAT", "123");
+
+        let result = parse_env();
+
+        assert!(matches!(
+            result,
+            Err(EnvFailure {
+                var: "ENTG_MESSAGE",
+                err: EnvError::Missing,
+            })
+        ));
+    }
+
+    #[test]
+    fn test_all_env_vars_set() {
+        let _guard = ENV_MUTEX.lock().unwrap();
+        clean_env();
+        env::set_var("ENTG_TOKEN", "testtoken");
+        env::set_var("ENTG_CHAT", "123");
+        env::set_var("ENTG_MESSAGE", "Hello, World!");
+
+        let result = parse_env();
+
+        assert!(
+            matches!(result, Ok(Action::SendMessage(t, c, _)) if t == "testtoken" && c == "123")
+        );
+    }
+}
