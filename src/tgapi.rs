@@ -2,7 +2,8 @@ use percent_encoding_rfc3986::{utf8_percent_encode, AsciiSet, NON_ALPHANUMERIC};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
-use ureq::Error;
+use ureq::tls::{TlsConfig, TlsProvider};
+use ureq::{Agent, Error};
 
 #[derive(Deserialize)]
 struct Response<T> {
@@ -70,9 +71,18 @@ where
         Method::Post(_) => "POST",
     };
 
+    let agent: Agent = Agent::config_builder()
+        .tls_config(
+            TlsConfig::builder()
+                .provider(TlsProvider::NativeTls)
+                .build(),
+        )
+        .build()
+        .into();
+
     let req = match method {
-        Method::Get => ureq::get(url).call(),
-        Method::Post(body) => ureq::post(url).send_json(body),
+        Method::Get => agent.get(url).call(),
+        Method::Post(body) => agent.post(url).send_json(body),
     };
 
     match req {
