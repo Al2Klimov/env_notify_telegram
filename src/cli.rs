@@ -5,7 +5,7 @@ use teloxide_core::Bot;
 
 pub(crate) enum Action {
     ListChats,
-    SendMessage(String, String),
+    SendMessage { chat_id: String, message: String },
 }
 
 pub(crate) struct EnvFailure {
@@ -26,12 +26,12 @@ pub(crate) fn parse_env() -> Result<(Bot, Action), EnvFailure> {
             EnvError::Missing => Ok((bot, Action::ListChats)),
             _ => Err(err),
         },
-        Ok(chat) => Ok((
+        Ok(chat_id) => Ok((
             bot,
-            Action::SendMessage(
-                chat,
-                require_env("ENTG_MESSAGE")?.to_string_lossy().to_string(),
-            ),
+            Action::SendMessage {
+                chat_id,
+                message: require_env("ENTG_MESSAGE")?.to_string_lossy().to_string(),
+            },
         )),
     }
 }
@@ -162,7 +162,7 @@ mod tests {
         let result = parse_env();
 
         assert!(
-            matches!(result, Ok((bot, Action::SendMessage(c, _))) if bot.token() == "testtoken" && c == "123")
+            matches!(result, Ok((bot, Action::SendMessage{chat_id, message: _})) if bot.token() == "testtoken" && chat_id == "123")
         );
     }
 }

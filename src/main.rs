@@ -50,7 +50,7 @@ async fn main() {
 
                 exit(3);
             }
-            Action::SendMessage(chat_id, message) => {
+            Action::SendMessage { chat_id, message } => {
                 match bot.send_message(chat_id, message).await {
                     Err(err) => {
                         eprintln!("{}", err);
