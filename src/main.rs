@@ -1,14 +1,15 @@
 mod cli;
-mod tgapi;
 
 use crate::cli::Action;
-use crate::tgapi::{request, Message, Method, SendMessage, Update};
 use cli::EnvError;
 use humantime::format_duration;
 use std::process::exit;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use teloxide_core::requests::Requester;
+use teloxide_core::types::{Message, UpdateKind};
 
-fn main() {
+#[tokio::main(flavor = "current_thread")]
+async fn main() {
     match cli::parse_env() {
         Err(err) => {
             eprint!("Environment variable {} ", err.var);
@@ -21,23 +22,23 @@ fn main() {
 
             exit(3);
         }
-        Ok(action) => match action {
-            Action::ListChats(token) => {
+        Ok((bot, action)) => match action {
+            Action::ListChats => {
                 eprintln!("No chat given, discovering existing chats...");
 
-                match request::<(), Vec<Update>>(Method::Get, token, "getUpdates") {
+                match bot.get_updates().await {
                     Err(err) => eprintln!("{}", err),
                     Ok(resp) => {
                         let mut messages: usize = 0;
                         let now = SystemTime::now();
 
                         for update in resp {
-                            match update.message {
-                                None => {}
-                                Some(message) => {
+                            match update.kind {
+                                UpdateKind::Message(message) => {
                                     print_message(message, now);
                                     messages += 1;
                                 }
+                                _ => {}
                             }
                         }
 
@@ -49,15 +50,8 @@ fn main() {
 
                 exit(3);
             }
-            Action::SendMessage(token, chat_id, message) => {
-                match request::<SendMessage, Message>(
-                    Method::Post(SendMessage {
-                        chat_id,
-                        text: message.to_string_lossy().to_string(),
-                    }),
-                    token,
-                    "sendMessage",
-                ) {
+            Action::SendMessage(chat_id, message) => {
+                match bot.send_message(chat_id, message).await {
                     Err(err) => {
                         eprintln!("{}", err);
                         exit(2);
@@ -74,19 +68,19 @@ fn print_message(message: Message, now: SystemTime) {
         "[ENTG_CHAT={}] {} ago: {}: {}",
         message.chat.id,
         format_duration(Duration::from_secs(
-            now.duration_since(UNIX_EPOCH + Duration::from_secs(message.date))
+            now.duration_since(UNIX_EPOCH + Duration::from_secs(message.date.timestamp() as u64))
                 .unwrap_or_default()
                 .as_secs()
         )),
-        match &message.chat.title {
-            Some(title) => title.as_str(),
-            None => match &message.chat.username {
-                Some(username) => username.as_str(),
+        match &message.chat.title() {
+            Some(title) => title,
+            None => match &message.chat.username() {
+                Some(username) => username,
                 None => "N/A",
             },
         },
-        match &message.text {
-            Some(text) => text.as_str(),
+        match &message.text() {
+            Some(text) => text,
             None => "N/A",
         }
     );

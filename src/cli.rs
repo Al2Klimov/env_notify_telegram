@@ -1,10 +1,11 @@
 use std::env::var_os;
 use std::ffi::OsString;
 use std::str::Utf8Error;
+use teloxide_core::Bot;
 
 pub(crate) enum Action {
-    ListChats(String),
-    SendMessage(String, String, OsString),
+    ListChats,
+    SendMessage(String, String),
 }
 
 pub(crate) struct EnvFailure {
@@ -18,17 +19,19 @@ pub(crate) enum EnvError {
     BadUnicode(Utf8Error),
 }
 
-pub(crate) fn parse_env() -> Result<Action, EnvFailure> {
-    let token = require_noempty_utf8_env("ENTG_TOKEN")?;
+pub(crate) fn parse_env() -> Result<(Bot, Action), EnvFailure> {
+    let bot = Bot::new(require_noempty_utf8_env("ENTG_TOKEN")?);
     match require_noempty_utf8_env("ENTG_CHAT") {
         Err(err) => match err.err {
-            EnvError::Missing => Ok(Action::ListChats(token)),
+            EnvError::Missing => Ok((bot, Action::ListChats)),
             _ => Err(err),
         },
-        Ok(chat) => Ok(Action::SendMessage(
-            token,
-            chat,
-            require_env("ENTG_MESSAGE")?,
+        Ok(chat) => Ok((
+            bot,
+            Action::SendMessage(
+                chat,
+                require_env("ENTG_MESSAGE")?.to_string_lossy().to_string(),
+            ),
         )),
     }
 }
@@ -109,7 +112,7 @@ mod tests {
 
         let result = parse_env();
 
-        assert!(matches!(result, Ok(Action::ListChats(t)) if t == "testtoken"));
+        assert!(matches!(result, Ok((bot, Action::ListChats)) if bot.token() == "testtoken"));
     }
 
     #[test]
@@ -159,7 +162,7 @@ mod tests {
         let result = parse_env();
 
         assert!(
-            matches!(result, Ok(Action::SendMessage(t, c, _)) if t == "testtoken" && c == "123")
+            matches!(result, Ok((bot, Action::SendMessage(c, _))) if bot.token() == "testtoken" && c == "123")
         );
     }
 }
