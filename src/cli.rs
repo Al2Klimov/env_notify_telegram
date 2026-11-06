@@ -1,3 +1,4 @@
+use redis::{Client, RedisError};
 use std::env::var_os;
 use std::ffi::OsString;
 use std::str::Utf8Error;
@@ -16,19 +17,35 @@ pub(crate) enum EnvError {
     Missing,
     Empty,
     BadUnicode(Utf8Error),
+    BadRedis(RedisError),
 }
 
-pub(crate) fn parse_env() -> Result<Action, EnvFailure> {
+pub(crate) fn parse_env() -> Result<(Action, Option<Client>), EnvFailure> {
+    let redis = match require_noempty_utf8_env("ENTG_REDIS") {
+        Ok(url) => match Client::open(url) {
+            Ok(client) => Some(client),
+            Err(err) => {
+                return Err(EnvFailure {
+                    var: "ENTG_REDIS",
+                    err: EnvError::BadRedis(err),
+                })
+            }
+        },
+        Err(err) => match err.err {
+            EnvError::Missing => None,
+            _ => return Err(err),
+        },
+    };
+
     let token = require_noempty_utf8_env("ENTG_TOKEN")?;
     match require_noempty_utf8_env("ENTG_CHAT") {
         Err(err) => match err.err {
-            EnvError::Missing => Ok(Action::ListChats(token)),
+            EnvError::Missing => Ok((Action::ListChats(token), redis)),
             _ => Err(err),
         },
-        Ok(chat) => Ok(Action::SendMessage(
-            token,
-            chat,
-            require_env("ENTG_MESSAGE")?,
+        Ok(chat) => Ok((
+            Action::SendMessage(token, chat, require_env("ENTG_MESSAGE")?),
+            redis,
         )),
     }
 }
@@ -109,7 +126,7 @@ mod tests {
 
         let result = parse_env();
 
-        assert!(matches!(result, Ok(Action::ListChats(t)) if t == "testtoken"));
+        assert!(matches!(result, Ok((Action::ListChats(t), _)) if t == "testtoken"));
     }
 
     #[test]
@@ -159,7 +176,7 @@ mod tests {
         let result = parse_env();
 
         assert!(
-            matches!(result, Ok(Action::SendMessage(t, c, _)) if t == "testtoken" && c == "123")
+            matches!(result, Ok((Action::SendMessage(t, c, _), _)) if t == "testtoken" && c == "123")
         );
     }
 }

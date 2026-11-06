@@ -5,6 +5,7 @@ use crate::cli::Action;
 use crate::tgapi::{request, Message, Method, SendMessage, Update};
 use cli::EnvError;
 use humantime::format_duration;
+use redis::Client;
 use std::process::exit;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -17,12 +18,15 @@ fn main() {
                 EnvError::Missing => eprintln!("missing"),
                 EnvError::Empty => eprintln!("is empty"),
                 EnvError::BadUnicode(err) => eprintln!("is not valid UTF-8: {}", err),
+                EnvError::BadRedis(err) => eprintln!("is not a valid Redis URL: {}", err),
             }
 
             exit(3);
         }
-        Ok(action) => match action {
+        Ok((action, redis)) => match action {
             Action::ListChats(token) => {
+                tg2redis(&token, redis);
+
                 eprintln!("No chat given, discovering existing chats...");
 
                 match request::<(), Vec<Update>>(Method::Get, token, "getUpdates") {
@@ -50,6 +54,8 @@ fn main() {
                 exit(3);
             }
             Action::SendMessage(token, chat_id, message) => {
+                tg2redis(&token, redis);
+
                 match request::<SendMessage, Message>(
                     Method::Post(SendMessage {
                         chat_id,
@@ -67,6 +73,10 @@ fn main() {
             }
         },
     }
+}
+
+fn tg2redis(token: &String, redis: Option<Client>) {
+    todo!()
 }
 
 fn print_message(message: Message, now: SystemTime) {
