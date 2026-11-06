@@ -41,6 +41,10 @@ async fn main() {
                                     print_message(message, now);
                                     messages += 1;
                                 }
+                                UpdateKind::CallbackQuery(query) => eprintln!(
+                                    "{}",
+                                    serde_json::to_string_pretty(&query).unwrap_or_default()
+                                ),
                                 _ => {}
                             }
                         }
