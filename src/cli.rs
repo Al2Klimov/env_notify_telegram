@@ -20,8 +20,8 @@ pub(crate) enum EnvError {
 }
 
 pub(crate) fn parse_env() -> Result<(Bot, Action), EnvFailure> {
-    let bot = Bot::new(require_noempty_utf8_env("ENTG_TOKEN")?);
-    match require_noempty_utf8_env("ENTG_CHAT") {
+    let bot = Bot::new(require_env_notempty_utf8("ENTG_TOKEN")?);
+    match require_env_notempty_utf8("ENTG_CHAT") {
         Err(err) => match err.err {
             EnvError::Missing => Ok((bot, Action::ListChats)),
             _ => Err(err),
@@ -36,25 +36,45 @@ pub(crate) fn parse_env() -> Result<(Bot, Action), EnvFailure> {
     }
 }
 
-fn require_noempty_utf8_env(var: &'static str) -> Result<String, EnvFailure> {
-    let oss = require_env(var)?;
-    if oss.is_empty() {
-        Err(EnvError::Empty)
-    } else {
-        String::from_utf8(oss.into_encoded_bytes())
-            .map_err(|err| EnvError::BadUnicode(err.utf8_error()))
-    }
-    .map_err(|err| EnvFailure { var, err })
+fn require_env(var: &'static str) -> Result<OsString, EnvFailure> {
+    process_env(var, |k, v| env_present(k, v))
 }
 
-fn require_env(var: &'static str) -> Result<OsString, EnvFailure> {
-    match var_os(var) {
-        None => Err(EnvFailure {
+fn require_env_notempty_utf8(var: &'static str) -> Result<String, EnvFailure> {
+    process_env(var, |k, v| {
+        env_present(k, v)
+            .and_then(|v| env_notempty(k, v))
+            .and_then(|v| env_utf8(k, v))
+    })
+}
+
+fn process_env<T>(var: &'static str, process: fn(&'static str, Option<OsString>) -> T) -> T {
+    process(var, var_os(var))
+}
+
+fn env_present(var: &'static str, value: Option<OsString>) -> Result<OsString, EnvFailure> {
+    value.ok_or(EnvFailure {
+        var,
+        err: EnvError::Missing,
+    })
+}
+
+fn env_notempty(var: &'static str, value: OsString) -> Result<OsString, EnvFailure> {
+    if value.is_empty() {
+        Err(EnvFailure {
             var,
-            err: EnvError::Missing,
-        }),
-        Some(oss) => Ok(oss),
+            err: EnvError::Empty,
+        })
+    } else {
+        Ok(value)
     }
+}
+
+fn env_utf8(var: &'static str, value: OsString) -> Result<String, EnvFailure> {
+    String::from_utf8(value.into_encoded_bytes()).map_err(|err| EnvFailure {
+        var,
+        err: EnvError::BadUnicode(err.utf8_error()),
+    })
 }
 
 #[cfg(test)]
