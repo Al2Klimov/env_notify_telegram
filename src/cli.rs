@@ -37,7 +37,7 @@ pub(crate) fn parse_env() -> Result<(Bot, Action), EnvFailure> {
 }
 
 fn require_env(var: &'static str) -> Result<OsString, EnvFailure> {
-    process_env(var, |k, v| env_present(k, v))
+    process_env(var, env_present)
 }
 
 fn require_env_notempty_utf8(var: &'static str) -> Result<String, EnvFailure> {
