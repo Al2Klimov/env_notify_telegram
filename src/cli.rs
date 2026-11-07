@@ -20,24 +20,27 @@ pub(crate) enum EnvError {
 }
 
 pub(crate) fn parse_env() -> Result<(Bot, Action), EnvFailure> {
-    let bot = Bot::new(require_env_notempty_utf8("ENTG_TOKEN")?);
-    match require_env_notempty_utf8("ENTG_CHAT") {
-        Err(err) => match err.err {
-            EnvError::Missing => Ok((bot, Action::ListChats)),
-            _ => Err(err),
-        },
-        Ok(chat) => Ok((
-            bot,
-            Action::SendMessage(
+    Ok((
+        Bot::new(require_env_notempty_utf8("ENTG_TOKEN")?),
+        match env_notempty_utf8("ENTG_CHAT")? {
+            None => Action::ListChats,
+            Some(chat) => Action::SendMessage(
                 chat,
                 require_env("ENTG_MESSAGE")?.to_string_lossy().to_string(),
             ),
-        )),
-    }
+        },
+    ))
 }
 
 fn require_env(var: &'static str) -> Result<OsString, EnvFailure> {
     process_env(var, env_present)
+}
+
+fn env_notempty_utf8(var: &'static str) -> Result<Option<String>, EnvFailure> {
+    process_env(var, |k, v| {
+        v.map(|v| env_notempty(k, v).and_then(|v| env_utf8(k, v)))
+            .transpose()
+    })
 }
 
 fn require_env_notempty_utf8(var: &'static str) -> Result<String, EnvFailure> {
