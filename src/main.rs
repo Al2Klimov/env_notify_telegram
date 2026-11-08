@@ -11,6 +11,12 @@ use teloxide_core::payloads::SendMessageSetters;
 use teloxide_core::requests::Requester;
 use teloxide_core::types::{InlineKeyboardButton, InlineKeyboardMarkup, Message, UpdateKind};
 
+enum Status {
+    SendSuccess = 0,
+    SendFailure = 2,
+    NothingToSend = 3,
+}
+
 #[tokio::main(flavor = "current_thread")]
 async fn main() {
     match cli::parse_env() {
@@ -23,7 +29,7 @@ async fn main() {
                 EnvError::BadUnicode(err) => eprintln!("is not valid UTF-8: {}", err),
             }
 
-            exit(3);
+            exit(Status::NothingToSend as i32);
         }
         Ok((bot, action)) => match action {
             Action::ListChats => {
@@ -51,7 +57,7 @@ async fn main() {
                     }
                 }
 
-                exit(3);
+                exit(Status::NothingToSend as i32);
             }
             Action::SendMessage {
                 chat_id,
@@ -88,13 +94,13 @@ async fn main() {
                     }
                 };
 
-                match msg.await {
+                exit(match msg.await {
                     Err(err) => {
                         eprintln!("{}", err);
-                        exit(2);
+                        Status::SendFailure
                     }
-                    Ok(_) => {}
-                }
+                    Ok(_) => Status::SendSuccess,
+                } as i32);
             }
         },
     }
