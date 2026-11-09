@@ -1,3 +1,4 @@
+use redis::{Client, RedisError};
 use std::env::var_os;
 use std::ffi::OsString;
 use std::str::Utf8Error;
@@ -7,8 +8,8 @@ pub(crate) enum Action {
     ListChats,
     SendMessage {
         chat_id: String,
-        service: Option<Vec<u8>>,
         message: String,
+        mute: Option<(Vec<u8>, Client)>,
     },
 }
 
@@ -21,6 +22,7 @@ pub(crate) enum EnvError {
     Missing,
     Empty,
     BadUnicode(Utf8Error),
+    BadRedis(RedisError),
 }
 
 pub(crate) fn parse_env() -> Result<(Bot, Action), EnvFailure> {
@@ -30,8 +32,11 @@ pub(crate) fn parse_env() -> Result<(Bot, Action), EnvFailure> {
             None => Action::ListChats,
             Some(chat_id) => Action::SendMessage {
                 chat_id,
-                service: var_os("ENTG_SERVICE").map(|v| v.into_encoded_bytes()),
                 message: require_env("ENTG_MESSAGE")?.to_string_lossy().to_string(),
+                mute: match var_os("ENTG_SERVICE") {
+                    None => None,
+                    Some(v) => Some((v.into_encoded_bytes(), require_redis("ENTG_REDIS")?)),
+                },
             },
         },
     ))
@@ -45,6 +50,13 @@ fn env_notempty_utf8(var: &'static str) -> Result<Option<String>, EnvFailure> {
     process_env(var, |k, v| {
         v.map(|v| env_notempty(k, v).and_then(|v| env_utf8(k, v)))
             .transpose()
+    })
+}
+
+fn require_redis(var: &'static str) -> Result<Client, EnvFailure> {
+    Client::open(require_env_notempty_utf8(var)?).map_err(|err| EnvFailure {
+        var,
+        err: EnvError::BadRedis(err),
     })
 }
 
@@ -190,7 +202,7 @@ mod tests {
         let result = parse_env();
 
         assert!(
-            matches!(result, Ok((bot, Action::SendMessage{chat_id, service: _, message: _})) if bot.token() == "testtoken" && chat_id == "123")
+            matches!(result, Ok((bot, Action::SendMessage{chat_id, message: _, mute: _})) if bot.token() == "testtoken" && chat_id == "123")
         );
     }
 }
