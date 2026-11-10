@@ -35,3 +35,25 @@ Finally, check your inbox:
 
 One bot (ENTG\_TOKEN) can notify any number of recipients (ENTG\_CHAT).
 But when multiple senders don't trust each other, each should have an own bot.
+
+### Temporarily mute individual services
+
+If you monitor multiple distinct services, such as load and disk,
+you don't have to mute a whole bot while one service is spamming alerts.
+Instead, while sending a message, set `ENTG_SERVICE` to the service name
+the alert is about and `ENTG_REDIS` to the
+[URL to your Redis](https://docs.rs/redis/1.2.2/redis/#connection-parameters):
+
+```bash
+ENTG_TOKEN=4839574812:AAFD39kkdpWt3ywyRZergyOLMaJhac60qc \
+  ENTG_REDIS=redis+unix:///run/redis.unixsocket \
+  ENTG_CHAT=1424462536 \
+  ENTG_SERVICE='localhost!memory' \
+  ENTG_MESSAGE='[CRITICAL] Sam wants your RAM!🐏' \
+  env_notify_telegram
+```
+
+Then every message for a service will offer muting the whole service
+for 1/2/3/... hours/days directly in Telegram with one tap:
+
+![](mute.png)
