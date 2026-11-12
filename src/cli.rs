@@ -1,4 +1,4 @@
-use redis::{Client, RedisError};
+use redis::{Client, IntoConnectionInfo, RedisError};
 use std::env::var_os;
 use std::ffi::OsString;
 use std::str::Utf8Error;
@@ -54,10 +54,17 @@ fn env_notempty_utf8(var: &'static str) -> Result<Option<String>, EnvFailure> {
 }
 
 fn require_redis(var: &'static str) -> Result<Client, EnvFailure> {
-    Client::open(require_env_notempty_utf8(var)?).map_err(|err| EnvFailure {
-        var,
-        err: EnvError::BadRedis(err),
-    })
+    require_env_notempty_utf8(var)?
+        .into_connection_info()
+        .map(|info| {
+            let settings = info.redis_settings().clone().set_skip_set_lib_name();
+            info.set_redis_settings(settings)
+        })
+        .and_then(Client::open)
+        .map_err(|err| EnvFailure {
+            var,
+            err: EnvError::BadRedis(err),
+        })
 }
 
 fn require_env_notempty_utf8(var: &'static str) -> Result<String, EnvFailure> {
