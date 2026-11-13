@@ -1,3 +1,4 @@
+use redis::{Client, IntoConnectionInfo, RedisError};
 use std::env::var_os;
 use std::ffi::OsString;
 use std::str::Utf8Error;
@@ -5,7 +6,11 @@ use teloxide_core::Bot;
 
 pub(crate) enum Action {
     ListChats,
-    SendMessage(String, String),
+    SendMessage {
+        chat_id: String,
+        message: String,
+        mute: Option<(Vec<u8>, Client)>,
+    },
 }
 
 pub(crate) struct EnvFailure {
@@ -17,6 +22,7 @@ pub(crate) enum EnvError {
     Missing,
     Empty,
     BadUnicode(Utf8Error),
+    BadRedis(RedisError),
 }
 
 pub(crate) fn parse_env() -> Result<(Bot, Action), EnvFailure> {
@@ -24,10 +30,14 @@ pub(crate) fn parse_env() -> Result<(Bot, Action), EnvFailure> {
         Bot::new(require_env_notempty_utf8("ENTG_TOKEN")?),
         match env_notempty_utf8("ENTG_CHAT")? {
             None => Action::ListChats,
-            Some(chat) => Action::SendMessage(
-                chat,
-                require_env("ENTG_MESSAGE")?.to_string_lossy().to_string(),
-            ),
+            Some(chat_id) => Action::SendMessage {
+                chat_id,
+                message: require_env("ENTG_MESSAGE")?.to_string_lossy().to_string(),
+                mute: match var_os("ENTG_SERVICE") {
+                    None => None,
+                    Some(v) => Some((v.into_encoded_bytes(), require_redis("ENTG_REDIS")?)),
+                },
+            },
         },
     ))
 }
@@ -41,6 +51,20 @@ fn env_notempty_utf8(var: &'static str) -> Result<Option<String>, EnvFailure> {
         v.map(|v| env_notempty(k, v).and_then(|v| env_utf8(k, v)))
             .transpose()
     })
+}
+
+fn require_redis(var: &'static str) -> Result<Client, EnvFailure> {
+    require_env_notempty_utf8(var)?
+        .into_connection_info()
+        .map(|info| {
+            let settings = info.redis_settings().clone().set_skip_set_lib_name();
+            info.set_redis_settings(settings)
+        })
+        .and_then(Client::open)
+        .map_err(|err| EnvFailure {
+            var,
+            err: EnvError::BadRedis(err),
+        })
 }
 
 fn require_env_notempty_utf8(var: &'static str) -> Result<String, EnvFailure> {
@@ -185,7 +209,7 @@ mod tests {
         let result = parse_env();
 
         assert!(
-            matches!(result, Ok((bot, Action::SendMessage(c, _))) if bot.token() == "testtoken" && c == "123")
+            matches!(result, Ok((bot, Action::SendMessage{chat_id, message: _, mute: _})) if bot.token() == "testtoken" && chat_id == "123")
         );
     }
 }
