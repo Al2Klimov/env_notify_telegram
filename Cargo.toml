@@ -28,3 +28,6 @@ features = ["base64"]
 [dependencies.tokio]
 version = "1.54.1"
 features = ["macros"]
+
+[dev-dependencies]
+temp-env = "0.3.6"
