@@ -107,23 +107,27 @@ fn env_utf8(var: &'static str, value: OsString) -> Result<String, EnvFailure> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
-    use std::sync::Mutex;
+    use temp_env::with_vars;
 
-    static ENV_MUTEX: Mutex<()> = Mutex::new(());
-
-    fn clean_env() {
-        env::remove_var("ENTG_TOKEN");
-        env::remove_var("ENTG_CHAT");
-        env::remove_var("ENTG_MESSAGE");
+    fn with_env<R>(
+        token: Option<&str>,
+        chat: Option<&str>,
+        message: Option<&str>,
+        f: impl FnOnce() -> R,
+    ) -> R {
+        with_vars(
+            [
+                ("ENTG_TOKEN", token),
+                ("ENTG_CHAT", chat),
+                ("ENTG_MESSAGE", message),
+            ],
+            f,
+        )
     }
 
     #[test]
     fn test_missing_token() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-        clean_env();
-
-        let result = parse_env();
+        let result = with_env(None, None, None, parse_env);
 
         assert!(matches!(
             result,
@@ -136,11 +140,7 @@ mod tests {
 
     #[test]
     fn test_empty_token() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-        clean_env();
-        env::set_var("ENTG_TOKEN", "");
-
-        let result = parse_env();
+        let result = with_env(Some(""), None, None, parse_env);
 
         assert!(matches!(
             result,
@@ -153,23 +153,14 @@ mod tests {
 
     #[test]
     fn test_valid_token_no_chat() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-        clean_env();
-        env::set_var("ENTG_TOKEN", "testtoken");
-
-        let result = parse_env();
+        let result = with_env(Some("testtoken"), None, None, parse_env);
 
         assert!(matches!(result, Ok((bot, Action::ListChats)) if bot.token() == "testtoken"));
     }
 
     #[test]
     fn test_valid_token_empty_chat() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-        clean_env();
-        env::set_var("ENTG_TOKEN", "testtoken");
-        env::set_var("ENTG_CHAT", "");
-
-        let result = parse_env();
+        let result = with_env(Some("testtoken"), Some(""), None, parse_env);
 
         assert!(matches!(
             result,
@@ -182,12 +173,7 @@ mod tests {
 
     #[test]
     fn test_valid_token_and_chat_no_message() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-        clean_env();
-        env::set_var("ENTG_TOKEN", "testtoken");
-        env::set_var("ENTG_CHAT", "123");
-
-        let result = parse_env();
+        let result = with_env(Some("testtoken"), Some("123"), None, parse_env);
 
         assert!(matches!(
             result,
@@ -200,13 +186,12 @@ mod tests {
 
     #[test]
     fn test_all_env_vars_set() {
-        let _guard = ENV_MUTEX.lock().unwrap();
-        clean_env();
-        env::set_var("ENTG_TOKEN", "testtoken");
-        env::set_var("ENTG_CHAT", "123");
-        env::set_var("ENTG_MESSAGE", "Hello, World!");
-
-        let result = parse_env();
+        let result = with_env(
+            Some("testtoken"),
+            Some("123"),
+            Some("Hello, World!"),
+            parse_env,
+        );
 
         assert!(
             matches!(result, Ok((bot, Action::SendMessage{chat_id, message: _, mute: _})) if bot.token() == "testtoken" && chat_id == "123")
