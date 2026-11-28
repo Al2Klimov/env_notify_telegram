@@ -311,3 +311,64 @@ struct MuteV1 {
     service: Vec<u8>,
     until: i64,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_callback_roundtrip() {
+        let json = serde_json::to_string(&TelegramCallback::MuteV1(MuteV1 {
+            service: vec![0, 1, 255],
+            until: 42,
+        }))
+        .unwrap();
+
+        match serde_json::from_str::<TelegramCallback>(&json).unwrap() {
+            TelegramCallback::MuteV1(m) => {
+                assert_eq!(m.service, vec![0, 1, 255]);
+                assert_eq!(m.until, 42);
+            }
+        }
+    }
+
+    #[test]
+    fn test_callback_format_stable() {
+        let tcb: TelegramCallback =
+            serde_json::from_str(r#"{"MuteV1":{"service":"c3Zj","until":7}}"#).unwrap();
+
+        match tcb {
+            TelegramCallback::MuteV1(m) => {
+                assert_eq!(m.service, b"svc");
+                assert_eq!(m.until, 7);
+            }
+        }
+    }
+
+    #[test]
+    fn test_callback_invalid() {
+        assert!(serde_json::from_str::<TelegramCallback>("nope").is_err());
+        assert!(
+            serde_json::from_str::<TelegramCallback>(r#"{"MuteV1":{"service":"!!","until":1}}"#)
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn test_mute_for() {
+        let button = mute_for(&b"svc".to_vec(), 1000, 2, "label");
+
+        assert_eq!(button.text, "label");
+        match button.kind {
+            teloxide_core::types::InlineKeyboardButtonKind::CallbackData(data) => {
+                match serde_json::from_str::<TelegramCallback>(&data).unwrap() {
+                    TelegramCallback::MuteV1(m) => {
+                        assert_eq!(m.service, b"svc");
+                        assert_eq!(m.until, 1000 + 2 * 3600);
+                    }
+                }
+            }
+            _ => panic!("expected callback button"),
+        }
+    }
+}
