@@ -202,6 +202,7 @@ mod tests {
         with_vars(vars, f)
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_bad_unicode_token() {
         use std::os::unix::ffi::OsStringExt;
@@ -225,6 +226,7 @@ mod tests {
         ));
     }
 
+    #[cfg(unix)]
     #[test]
     fn test_bad_unicode_chat() {
         use std::os::unix::ffi::OsStringExt;
