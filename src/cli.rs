@@ -197,4 +197,151 @@ mod tests {
             matches!(result, Ok((bot, Action::SendMessage{chat_id, message: _, mute: _})) if bot.token() == "testtoken" && chat_id == "123")
         );
     }
+
+    fn with_full_env<R>(vars: [(&str, Option<&str>); 5], f: impl FnOnce() -> R) -> R {
+        with_vars(vars, f)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_bad_unicode_token() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let bad = OsString::from_vec(vec![0x66, 0xff, 0x6f]);
+        let result = with_vars(
+            [
+                ("ENTG_TOKEN", Some(bad)),
+                ("ENTG_CHAT", None),
+                ("ENTG_MESSAGE", None),
+            ],
+            parse_env,
+        );
+
+        assert!(matches!(
+            result,
+            Err(EnvFailure {
+                var: "ENTG_TOKEN",
+                err: EnvError::BadUnicode(_),
+            })
+        ));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_bad_unicode_chat() {
+        use std::os::unix::ffi::OsStringExt;
+
+        let bad = OsString::from_vec(vec![0xff]);
+        let result = with_vars(
+            [
+                ("ENTG_TOKEN", Some(OsString::from("testtoken"))),
+                ("ENTG_CHAT", Some(bad)),
+                ("ENTG_MESSAGE", None),
+            ],
+            parse_env,
+        );
+
+        assert!(matches!(
+            result,
+            Err(EnvFailure {
+                var: "ENTG_CHAT",
+                err: EnvError::BadUnicode(_),
+            })
+        ));
+    }
+
+    #[test]
+    fn test_message_content() {
+        let result = with_env(Some("t"), Some("123"), Some("Hello"), parse_env);
+
+        assert!(matches!(
+            result,
+            Ok((_, Action::SendMessage { message, mute: None, .. })) if message == "Hello"
+        ));
+    }
+
+    #[test]
+    fn test_service_without_redis() {
+        let result = with_full_env(
+            [
+                ("ENTG_TOKEN", Some("t")),
+                ("ENTG_CHAT", Some("123")),
+                ("ENTG_MESSAGE", Some("m")),
+                ("ENTG_SERVICE", Some("svc")),
+                ("ENTG_REDIS", None),
+            ],
+            parse_env,
+        );
+
+        assert!(matches!(
+            result,
+            Err(EnvFailure {
+                var: "ENTG_REDIS",
+                err: EnvError::Missing,
+            })
+        ));
+    }
+
+    #[test]
+    fn test_service_with_empty_redis() {
+        let result = with_full_env(
+            [
+                ("ENTG_TOKEN", Some("t")),
+                ("ENTG_CHAT", Some("123")),
+                ("ENTG_MESSAGE", Some("m")),
+                ("ENTG_SERVICE", Some("svc")),
+                ("ENTG_REDIS", Some("")),
+            ],
+            parse_env,
+        );
+
+        assert!(matches!(
+            result,
+            Err(EnvFailure {
+                var: "ENTG_REDIS",
+                err: EnvError::Empty,
+            })
+        ));
+    }
+
+    #[test]
+    fn test_service_with_bad_redis() {
+        let result = with_full_env(
+            [
+                ("ENTG_TOKEN", Some("t")),
+                ("ENTG_CHAT", Some("123")),
+                ("ENTG_MESSAGE", Some("m")),
+                ("ENTG_SERVICE", Some("svc")),
+                ("ENTG_REDIS", Some("http://localhost")),
+            ],
+            parse_env,
+        );
+
+        assert!(matches!(
+            result,
+            Err(EnvFailure {
+                var: "ENTG_REDIS",
+                err: EnvError::BadRedis(_),
+            })
+        ));
+    }
+
+    #[test]
+    fn test_service_with_valid_redis() {
+        let result = with_full_env(
+            [
+                ("ENTG_TOKEN", Some("t")),
+                ("ENTG_CHAT", Some("123")),
+                ("ENTG_MESSAGE", Some("m")),
+                ("ENTG_SERVICE", Some("svc")),
+                ("ENTG_REDIS", Some("redis://localhost")),
+            ],
+            parse_env,
+        );
+
+        assert!(matches!(
+            result,
+            Ok((_, Action::SendMessage { mute: Some((svc, _)), .. })) if svc == b"svc"
+        ));
+    }
 }
